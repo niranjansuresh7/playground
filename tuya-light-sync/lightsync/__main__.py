@@ -8,6 +8,7 @@
 """
 
 import argparse
+import ipaddress
 import json
 import sys
 from pathlib import Path
@@ -29,6 +30,30 @@ def find_input_device(sd, name_hint):
     )
 
 
+def load_config(path):
+    """Read config.json, trimming stray spaces that sneak in when pasting values."""
+    if not path.exists():
+        return {}
+    config = json.loads(path.read_text())
+    return {k: v.strip() if isinstance(v, str) else v for k, v in config.items()}
+
+
+def check_bulb_config(config, path):
+    problems = []
+    if not config.get("device_id") or config["device_id"].startswith("PASTE_"):
+        problems.append("device_id is missing")
+    if not config.get("local_key") or config["local_key"].startswith("PASTE_"):
+        problems.append("local_key is missing")
+    elif len(config["local_key"]) != 16:
+        problems.append(f"local_key should be 16 characters but has {len(config['local_key'])}")
+    try:
+        ipaddress.IPv4Address(config.get("ip", ""))
+    except ValueError:
+        problems.append(f"ip '{config.get('ip')}' is not a valid address (expected like 192.168.1.12)")
+    if problems:
+        sys.exit(f"Problems in {path}:\n  - " + "\n  - ".join(problems))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=sorted(EFFECTS), default="music")
@@ -45,9 +70,9 @@ def main():
         print(sd.query_devices())
         return
 
-    config = json.loads(args.config.read_text()) if args.config.exists() else {}
-    if not args.dry_run and not config.get("local_key"):
-        sys.exit(f"Missing bulb details. Copy config.example.json to {args.config} and fill it in.")
+    config = load_config(args.config)
+    if not args.dry_run:
+        check_bulb_config(config, args.config)
 
     sensitivity = args.sensitivity or config.get("sensitivity", 1.4)
     max_rate = args.max_rate or config.get("max_rate", 10)
