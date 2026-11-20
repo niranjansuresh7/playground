@@ -6,3 +6,4 @@ tuya-raw.json
 snapshot.json
 __pycache__/
 .venv/
+app_state.json

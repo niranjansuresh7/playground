@@ -5,53 +5,17 @@
     python -m lightsync --mode chill
     python -m lightsync --list-devices
     python -m lightsync --dry-run      # preview in the terminal, no bulb needed
+
+For the menu bar app, see `python -m lightsync.menubar` and macos/build_app.sh.
 """
 
 import argparse
-import ipaddress
-import json
 import sys
 from pathlib import Path
 
-from .analysis import AudioAnalyzer
+from .config import DEFAULT_CONFIG, bulb_config_problems, load_config
 from .effects import EFFECTS
-from .light import ConsoleLight, TuyaLight
-
-DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config.json"
-
-
-def find_input_device(sd, name_hint):
-    for index, dev in enumerate(sd.query_devices()):
-        if name_hint.lower() in dev["name"].lower() and dev["max_input_channels"] > 0:
-            return index, dev
-    sys.exit(
-        f"No input device matching '{name_hint}'. Run with --list-devices to see what's "
-        "available, then set \"audio_device\" in config.json."
-    )
-
-
-def load_config(path):
-    """Read config.json, trimming stray spaces that sneak in when pasting values."""
-    if not path.exists():
-        return {}
-    config = json.loads(path.read_text())
-    return {k: v.strip() if isinstance(v, str) else v for k, v in config.items()}
-
-
-def check_bulb_config(config, path):
-    problems = []
-    if not config.get("device_id") or config["device_id"].startswith("PASTE_"):
-        problems.append("device_id is missing")
-    if not config.get("local_key") or config["local_key"].startswith("PASTE_"):
-        problems.append("local_key is missing")
-    elif len(config["local_key"]) != 16:
-        problems.append(f"local_key should be 16 characters but has {len(config['local_key'])}")
-    try:
-        ipaddress.IPv4Address(config.get("ip", ""))
-    except ValueError:
-        problems.append(f"ip '{config.get('ip')}' is not a valid address (expected like 192.168.1.12)")
-    if problems:
-        sys.exit(f"Problems in {path}:\n  - " + "\n  - ".join(problems))
+from .engine import SyncEngine, SyncError
 
 
 def main():
@@ -64,47 +28,28 @@ def main():
     parser.add_argument("--max-rate", type=float, help="max bulb updates per second (default 10)")
     args = parser.parse_args()
 
-    import sounddevice as sd
-
     if args.list_devices:
+        import sounddevice as sd
+
         print(sd.query_devices())
         return
 
     config = load_config(args.config)
     if not args.dry_run:
-        check_bulb_config(config, args.config)
+        problems = bulb_config_problems(config)
+        if problems:
+            sys.exit(f"Problems in {args.config}:\n  - " + "\n  - ".join(problems))
 
-    sensitivity = args.sensitivity or config.get("sensitivity", 1.4)
-    max_rate = args.max_rate or config.get("max_rate", 10)
-
-    index, device = find_input_device(sd, config.get("audio_device", "BlackHole"))
-    samplerate = int(device["default_samplerate"])
-    blocksize = 1024 if samplerate <= 48000 else 2048
-    channels = min(2, device["max_input_channels"])
-
-    analyzer = AudioAnalyzer(samplerate, blocksize, sensitivity=sensitivity)
-    effect = EFFECTS[args.mode]()
-
-    if args.dry_run:
-        light = ConsoleLight()
-    else:
-        light = TuyaLight(
-            config["device_id"], config["ip"], config["local_key"],
-            version=config.get("version", 3.3), max_rate=max_rate,
-        )
-
-    print(f"Listening on '{device['name']}' at {samplerate} Hz, mode={args.mode}. Ctrl+C to stop.")
+    engine = SyncEngine(config, mode=args.mode, sensitivity=args.sensitivity,
+                        max_rate=args.max_rate, dry_run=args.dry_run)
     try:
-        with sd.InputStream(device=index, channels=channels, samplerate=samplerate,
-                            blocksize=blocksize, dtype="float32") as stream:
-            while True:
-                block, _overflowed = stream.read(blocksize)
-                features = analyzer.process(block.mean(axis=1))
-                light.set_color(effect.update(features, analyzer.block_dt))
+        connection = engine.connect()
+        print(f"Listening on '{connection[2]['name']}', mode={args.mode}. Ctrl+C to stop.")
+        engine.run(connection)
+    except SyncError as exc:
+        sys.exit(str(exc))
     except KeyboardInterrupt:
         pass
-    finally:
-        light.close()
 
 
 if __name__ == "__main__":
