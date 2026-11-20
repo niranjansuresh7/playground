@@ -1,0 +1,8 @@
+# Bulb secrets: never commit these
+config.json
+devices.json
+tinytuya.json
+tuya-raw.json
+snapshot.json
+__pycache__/
+.venv/
