@@ -12,8 +12,7 @@ if [ ! -x "$PYTHON" ]; then
   python3 -m venv "$PROJECT_DIR/.venv"
 fi
 echo "Installing/updating packages ..."
-"$PYTHON" -m pip install --quiet --upgrade pip
-"$PYTHON" -m pip install --quiet -r "$PROJECT_DIR/requirements.txt"
+"$PYTHON" -m pip install --quiet --timeout 60 --retries 8 -r "$PROJECT_DIR/requirements.txt"
 
 echo "Building $APP ..."
 rm -rf "$APP"
