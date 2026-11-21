@@ -114,6 +114,42 @@ python -m lightsync --mode chill
 
 Press **Ctrl+C** to stop; the bulb goes back to a warm glow.
 
+## 5. Menu bar app (no Terminal needed)
+
+Build it once:
+
+```bash
+./macos/build_app.sh
+```
+
+This creates **LightSync.app** in your `Applications` folder (inside your
+home folder). Open it from Spotlight (Cmd+Space → "LightSync") and a 🔅 appears
+in the menu bar at the top right. Click it to:
+
+- **Start / Stop** syncing (the icon turns 💡 while it's running)
+- pick a **Mode**: Music, Movie or Chill (switches instantly, no restart)
+- set **Beat sensitivity**: More beats / Normal / Fewer beats
+- **Start syncing when app opens**: on by default
+- **Edit bulb settings…**: opens `config.json`
+
+Your choices are remembered next time.
+
+**Start it automatically when you log in:** System Settings → General →
+Login Items → **+** under "Open at Login" → pick LightSync from your home
+folder's Applications.
+
+The first time it starts, macOS asks whether LightSync can use the
+microphone. Click **Allow**: that's how it hears BlackHole. If the light
+doesn't react to sound, check System Settings → Privacy & Security →
+Microphone and turn on LightSync (or Python).
+
+If something goes wrong, the app shows a message; details are in
+`~/Library/Logs/LightSync.log`.
+
+The app runs the code in this folder, so after `git pull` just quit and
+reopen it. Re-run `build_app.sh` only if you move the folder or
+`requirements.txt` changes.
+
 ## Tuning
 
 | Problem                                   | Fix                                                    |
@@ -137,4 +173,8 @@ python -m unittest -v
 - `lightsync/analysis.py`: beat and loudness detection from audio
 - `lightsync/effects.py`: the `music`, `movie` and `chill` modes
 - `lightsync/light.py`: talks to the bulb (or the terminal preview)
+- `lightsync/engine.py`: the sync loop (shared by the app and the command line)
+- `lightsync/menubar.py`: the menu bar app
+- `lightsync/config.py`: reads and checks `config.json`
 - `lightsync/__main__.py`: command line entry point
+- `macos/build_app.sh`: builds `LightSync.app`
